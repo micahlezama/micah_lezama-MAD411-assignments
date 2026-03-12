@@ -1,0 +1,149 @@
+package com.example.habit_tracker_micah_lezama
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Button
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+
+data class Habit (
+    val name: String,
+    var isCompleted: Boolean = false
+)
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            HabitTrackerApp()
+        }
+    }
+}
+
+@Composable
+fun HabitTrackerApp() {
+    var habitText by remember { mutableStateOf("") }
+
+
+    val habits = remember { mutableStateListOf<Habit>() }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+
+            Text(
+                text = "Student Habit Tracker",
+                style = MaterialTheme.typography.headlineMedium
+            )
+
+            HabitInputSection(
+                habitText = habitText,
+                onHabitTextChange = { habitText = it },
+                onAddHabit = {
+                    if (habitText.isNotBlank()) {
+                        habits.add(Habit(habitText))
+                        habitText = ""
+                    }
+                }
+            )
+
+            HabitList(
+                habits = habits,
+                onHabitCompleted = { index ->
+                    habits[index].isCompleted = true
+                }
+            )
+        }
+    }
+}
+
+
+@Preview(showBackground = true)
+@Composable
+fun HabitTrackerAppPreview() {
+    HabitTrackerApp()
+}
+
+@Composable
+fun HabitInputSection(
+    habitText: String,
+    onHabitTextChange: (String) -> Unit,
+    onAddHabit: () -> Unit
+) {
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+        OutlinedTextField(
+            value = habitText,
+            onValueChange = onHabitTextChange,
+            label = { Text("Enter a new habit") },
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Button(onClick = onAddHabit) {
+            Text("Add Habit")
+        }
+    }
+}
+@Composable
+fun HabitList(
+    habits: List<Habit>,
+    onHabitCompleted: (Int) -> Unit
+) {
+    LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
+        items(habits.size) { index ->
+            HabitItem(
+                habit = habits[index],
+                onCompleted = { onHabitCompleted(index) }
+            )
+        }
+    }
+}
+@Composable
+fun HabitItem(
+    habit: Habit,
+    onCompleted: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+
+        Text(
+            text = habit.name,
+            style = if (habit.isCompleted)
+                MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.primary
+                )
+            else
+                MaterialTheme.typography.bodyLarge
+        )
+
+        Button(onClick = onCompleted) {
+            Text("Completed")
+        }
+    }
+}
+
+
+

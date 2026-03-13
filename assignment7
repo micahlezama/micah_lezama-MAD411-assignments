@@ -1,0 +1,186 @@
+package com.example.habit_tracker_micah_lezama
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Button
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Scaffold
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.FloatingActionButton
+
+data class Habit (
+    val name: String,
+    var isCompleted: Boolean = false,
+    val id: Long = System.currentTimeMillis()
+)
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            HabitTrackerApp()
+        }
+    }
+}
+
+@Composable
+fun HabitTrackerApp() {
+    var habitText by remember { mutableStateOf("") }
+    val habits = remember { mutableStateListOf<Habit>() }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+
+                Text(
+                    text = "Student Habit Tracker",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+
+                HabitInputSection(
+                    habitText = habitText,
+                    onHabitTextChange = { habitText = it },
+                    onAddHabit = {
+                        if (habitText.isNotBlank()) {
+                            habits.add(Habit(habitText))
+                            habitText = ""
+
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Habit added!")
+                            }
+                        }
+                    }
+                )
+
+                HabitList(
+                    habits = habits,
+                    onHabitCompleted = { index ->
+                        habits[index] = habits[index].copy(
+                            isCompleted = !habits[index].isCompleted
+                        )
+                    },
+                    onHabitDeleted = { index ->
+                        habits.removeAt(index)
+                    }
+                )
+            }
+        }
+    }
+}
+
+
+
+@Preview(showBackground = true)
+@Composable
+fun HabitTrackerAppPreview() {
+    HabitTrackerApp()
+}
+
+@Composable
+fun HabitInputSection(
+    habitText: String,
+    onHabitTextChange: (String) -> Unit,
+    onAddHabit: () -> Unit,
+
+) {
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+        OutlinedTextField(
+            value = habitText,
+            onValueChange = onHabitTextChange,
+            label = { Text("Enter a new habit") },
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        FloatingActionButton (onClick = onAddHabit) {
+            Text("Add Habit")
+        }
+
+
+    }
+}
+@Composable
+fun HabitList(
+    habits: List<Habit>,
+    onHabitCompleted: (Int) -> Unit,
+    onHabitDeleted: (Int) -> Unit
+) {
+    LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
+        items(
+            items = habits,
+            key = { habit -> habit.id }
+        ) { habit ->
+            HabitItem(
+                habit = habit,
+                onCompleted = { onHabitCompleted(habits.indexOf(habit)) },
+                onDelete = { onHabitDeleted(habits.indexOf(habit)) }
+            )
+        }
+    }
+
+}
+@Composable
+fun HabitItem(
+    habit: Habit,
+    onCompleted: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+
+        Text(
+            text = habit.name,
+            style = if (habit.isCompleted)
+                MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.primary
+                )
+            else
+                MaterialTheme.typography.bodyLarge
+        )
+
+        Button(onClick = onCompleted) {
+            Text("Completed")
+        }
+        Button(onClick = onDelete) {
+            Text("Delete")
+        }
+    }
+}
+
+
+

@@ -1,0 +1,331 @@
+package com.example.habit_tracker_micah_lezama
+
+import android.os.Bundle
+import android.util.Log
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import retrofit2.http.GET
+import retrofit2.http.Query
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.launch
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+
+
+data class Habit(
+    val name: String,
+    var isCompleted: Boolean = false,
+    val id: Long = System.currentTimeMillis()
+)
+data class Quote(
+    val q: String,
+    val a: String,
+    val h: String
+
+)
+
+interface QuoteApiService{
+    @GET("Quote")
+    suspend fun getRandomQuote(): List<Quote>
+}
+object RetrofitInstance {
+
+    private const val BASE_URL = "https://zenquotes.io/api/"
+
+    val api: QuoteApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(QuoteApiService::class.java)
+    }
+}
+sealed class QuoteUiState {
+    object Loading : QuoteUiState()
+    data class Success(val quote: List<Quote>) : QuoteUiState()
+
+    data class Error(val message: String) : QuoteUiState()
+}
+
+class HabitTrackerViewModel : ViewModel() {
+
+
+    private val _quoteUiState = MutableStateFlow<QuoteUiState>(QuoteUiState.Loading)
+    val quoteUiState: StateFlow<QuoteUiState> = _quoteUiState
+
+    init {
+        fetchQuote()
+    }
+
+    fun fetchQuote() {
+        viewModelScope.launch {
+            _quoteUiState.value = QuoteUiState.Loading
+
+            try {
+                val response = RetrofitInstance.api.getRandomQuote()
+                _quoteUiState.value = QuoteUiState.Success(response)
+            } catch (e: Exception) {
+                _quoteUiState.value = QuoteUiState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+}
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            HabitTrackerApp()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        Log.d("Lifecycle", "onStart called")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d("Lifecycle", "onResume called")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d("Lifecycle", "onPause called")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Log.d("Lifecycle", "onStop called")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d("Lifecycle", "onDestroy called")
+    }
+}
+
+@Composable
+fun HabitTrackerApp() {
+    val navController = rememberNavController()
+
+    NavHost(
+        navController = navController,
+        startDestination = "habit_list"
+    ) {
+        composable("habit_list") {
+            HabitListScreen(navController = navController)
+            Button(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))
+                    navController.context.startActivity(intent)
+                },
+                modifier = Modifier.padding(top = 16.dp)
+            ) {
+                Text("Open Website")
+            }
+
+        }
+        composable("habit_detail/{habitName}/{completed}") { backStackEntry ->
+            val habitName = backStackEntry.arguments?.getString("habitName")
+            val completed = backStackEntry.arguments?.getString("completed") == "true"
+            HabitDetailScreen(
+                navController = navController,
+                habitName = habitName,
+                completed = completed
+            )
+        }
+    }
+}
+
+@Composable
+fun HabitListScreen(navController: NavController) {
+    var habitText by rememberSaveable { mutableStateOf("") }
+
+    val habits = remember { mutableStateListOf<Habit>() }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .padding(padding)
+        ) {
+            Text(
+                text = "Student Habit Tracker",
+                style = MaterialTheme.typography.headlineMedium
+            )
+
+            QuoteSection()
+
+            HabitInputSection(
+                habitText = habitText,
+                onHabitTextChange = { habitText = it },
+                onAddHabit = {
+                    if (habitText.isNotBlank()) {
+                        habits.add(Habit(habitText))
+                        habitText = ""
+
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Habit added!")
+                        }
+                    }
+                }
+            )
+
+            HabitList(
+                habits = habits,
+                onHabitCompleted = { index ->
+                    habits[index] = habits[index].copy(
+                        isCompleted = !habits[index].isCompleted
+                    )
+                },
+                onHabitDeleted = { index ->
+                    habits.removeAt(index)
+                },
+                onHabitClicked = { habit ->
+                    navController.navigate(
+                        "habit_detail/${habit.name}/${habit.isCompleted}"
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun HabitInputSection(
+    habitText: String,
+    onHabitTextChange: (String) -> Unit,
+    onAddHabit: () -> Unit
+) {
+    var text by rememberSaveable { mutableStateOf(habitText) }
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = {
+                text = it
+                onHabitTextChange(it)
+            },
+            label = { Text("Enter a new habit") },
+            modifier = Modifier.padding(bottom = 8.dp)
+
+        )
+        FloatingActionButton(onClick = onAddHabit) {
+            Text("Add Habit")
+        }
+    }
+}
+
+@Composable
+fun HabitList(
+    habits: List<Habit>,
+    onHabitCompleted: (Int) -> Unit,
+    onHabitDeleted: (Int) -> Unit,
+    onHabitClicked: (Habit) -> Unit
+) {
+    LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
+        items(
+            items = habits,
+            key = { habit -> habit.id }
+        ) { habit ->
+            HabitItem(
+                habit = habit,
+                onCompleted = { onHabitCompleted(habits.indexOf(habit)) },
+                onDelete = { onHabitDeleted(habits.indexOf(habit)) },
+                onClick = { onHabitClicked(habit) }
+            )
+        }
+    }
+}
+
+@Composable
+fun HabitItem(
+    habit: Habit,
+    onCompleted: () -> Unit,
+    onDelete: () -> Unit,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = habit.name,
+            style = if (habit.isCompleted)
+                MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.primary
+                )
+            else
+                MaterialTheme.typography.bodyLarge
+        )
+
+        Button(onClick = onCompleted) {
+            Text("Completed")
+        }
+
+        Button(onClick = onDelete) {
+            Text("Delete")
+        }
+
+        Button(onClick = onClick) {
+            Text("View Details")
+        }
+    }
+}
+
+@Composable
+fun HabitDetailScreen(
+    navController: NavController,
+    habitName: String?,
+    completed: Boolean
+) {
+    Column(modifier = Modifier.padding(24.dp)) {
+        Text(
+            text = "Habit Detail",
+            style = MaterialTheme.typography.headlineMedium
+        )
+
+        Text(
+            text = "Habit: $habitName",
+            style = MaterialTheme.typography.bodyLarge
+        )
+
+        Text(
+            text = "Completed: $completed",
+            style = MaterialTheme.typography.bodyLarge
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(onClick = { navController.popBackStack() }) {
+            Text("Back")
+        }
+    }
+}

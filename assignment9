@@ -1,5 +1,6 @@
 package com.example.habit_tracker_micah_lezama
 
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -23,12 +24,19 @@ import kotlinx.coroutines.launch
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.File
 
 
 data class Habit(
@@ -66,7 +74,10 @@ sealed class QuoteUiState {
     data class Error(val message: String) : QuoteUiState()
 }
 
+private const val FILE_NAME = "habits.json"
 class HabitTrackerViewModel : ViewModel() {
+
+
 
 
     private val _quoteUiState = MutableStateFlow<QuoteUiState>(QuoteUiState.Loading)
@@ -75,10 +86,36 @@ class HabitTrackerViewModel : ViewModel() {
     init {
         fetchQuote()
     }
+     fun saveHabitsToFile(context: Context, habits: List<Habit>) {
+        val gson = Gson()
+        val jsonString = gson.toJson(habits)
+
+        val file = File(context.filesDir, FILE_NAME)
+        file.writeText(jsonString)
+    }
+    suspend fun loadHabitsFromFile(context: Context): List<Habit> {
+        return withContext(Dispatchers.IO) {
+            val file = File(context.filesDir, FILE_NAME)
+
+            if (!file.exists()) {
+                return@withContext emptyList<Habit>()
+            }
+
+            val jsonString = file.readText()
+
+            val gson = Gson()
+            val type = object : TypeToken<List<Habit>>() {}.type
+
+            return@withContext gson.fromJson(jsonString, type)
+        }
+    }
+
+
 
     fun fetchQuote() {
         viewModelScope.launch {
             _quoteUiState.value = QuoteUiState.Loading
+
 
             try {
                 val response = RetrofitInstance.api.getRandomQuote()
@@ -159,7 +196,13 @@ fun HabitTrackerApp() {
 
 @Composable
 fun HabitListScreen(navController: NavController) {
+    val viewModel: HabitTrackerViewModel = viewModel()
+
+    val context = LocalContext.current
     var habitText by rememberSaveable { mutableStateOf("") }
+    var userName by rememberSaveable { mutableStateOf("") }
+
+
 
     val habits = remember { mutableStateListOf<Habit>() }
 
@@ -179,6 +222,32 @@ fun HabitListScreen(navController: NavController) {
                 text = "Student Habit Tracker",
                 style = MaterialTheme.typography.headlineMedium
             )
+            var userName by rememberSaveable { mutableStateOf("")}
+            LaunchedEffect(Unit) {
+                val sharedPref = context.getSharedPreferences("UserPreferences", Context.MODE_PRIVATE)
+                userName = sharedPref.getString("userName", "") ?: ""
+            }
+
+            OutlinedTextField(
+                value = userName,
+                onValueChange = { userName = it },
+                label = { Text("Your Name") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp, bottom = 16.dp)
+            )
+            val context = LocalContext.current
+
+            Button(onClick = {
+                val sharedPref = context.getSharedPreferences("UserPreferences", Context.MODE_PRIVATE)
+                val editor = sharedPref.edit()
+                editor.putString("userName", userName)
+                editor.apply()
+            }) {
+                Text("Save Name")
+            }
+
+
 
             QuoteSection()
 
@@ -190,22 +259,36 @@ fun HabitListScreen(navController: NavController) {
                         habits.add(Habit(habitText))
                         habitText = ""
 
+                        viewModel.saveHabitsToFile(context, habits)
+
                         scope.launch {
                             snackbarHostState.showSnackbar("Habit added!")
+
                         }
                     }
+
                 }
             )
+
+            if (userName.isNotBlank()) {
+                Text(
+                    text = "Welcome back, $userName!"
+                )
+            }
 
             HabitList(
                 habits = habits,
                 onHabitCompleted = { index ->
                     habits[index] = habits[index].copy(
+
                         isCompleted = !habits[index].isCompleted
+
                     )
+                    viewModel.saveHabitsToFile(context, habits)
                 },
                 onHabitDeleted = { index ->
                     habits.removeAt(index)
+                    viewModel.saveHabitsToFile(context, habits)
                 },
                 onHabitClicked = { habit ->
                     navController.navigate(
@@ -238,8 +321,12 @@ fun HabitInputSection(
         FloatingActionButton(onClick = onAddHabit) {
             Text("Add Habit")
         }
+
+
     }
 }
+
+
 
 @Composable
 fun HabitList(
